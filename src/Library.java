@@ -105,6 +105,31 @@ public class Library {
             return "Member registered successfully.";
         }
     }
+  // Searches for a member by ID. Returns the Member or null if not found.
+    public Member findMemberById(String memberId) {
+        int i = 0;
+        while (i < memberCount) {
+            if (members[i].getMemberId() == memberId) {
+                return members[i];
+            }
+            i++;
+        }
+        return null;
+    }
+
+//Returns the total number of members stored in the library
+    public Member[] getAllMembers() {
+        Member[] result = new Member[memberCount];
+        for (int i = 0; i < memberCount; i++) {
+            result[i] = members[i];
+        }
+        return result;
+    }
+    public int getMemberCount() {
+        return memberCount;
+    }
+
+
 } 
    
 
