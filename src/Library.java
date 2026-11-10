@@ -92,7 +92,7 @@ public class Library {
 
 
     // Registering a member to the system if their ID is unique and space is available
-    public String registerMember(String id, String name, String course, String phone) {
+    public String registerMember(int id, String name, String course, String phone) {
         if (name.trim().isEmpty() || course.trim().isEmpty() || phone.trim().isEmpty()) {
             return "Name, course, and phone cannot be empty.";
 
@@ -106,7 +106,7 @@ public class Library {
         }
     }
   // Searches for a member by ID. Returns the Member or null if not found.
-    public Member findMemberById(String memberId) {
+    public Member findMemberById(int memberId) {
         int i = 0;
         while (i < memberCount) {
             if (members[i].getMemberId() == memberId) {
@@ -129,7 +129,53 @@ public class Library {
         return memberCount;
     }
 
+    // Member borrows a book if both exist and the book is available. Returns a message describing what happened.
+    public String borrowBook(int memberId, int bookId) {
+        Book book = findBookById(bookId);
+        Member member = findMemberById(memberId);
 
-} 
+        if (book == null) {
+            return "Book not found.";
+        } else if (member == null) {
+            return "Member not found.";
+        } else if (!book.isAvailable()) {
+            return "Book is already borrowed.";
+        } else if (!member.canBorrow()) {
+            return member.getName() + " has reached the limit of " + Member.MAX_BOOKS + " books.";
+        } else {
+            book.setAvailable(false);
+            member.incrementBorrowed();
+            return "Book borrowed successfully by " + member.getName() + ".";
+        }
+    }
+
+    // Member returns a book if both exist and the book is currently borrowed. Returns a message describing what happened.
+    public String returnBook(int bookId, int memberId) {
+        Book book = findBookById(bookId);
+        Member member = findMemberById(memberId);
+
+        if (book == null) {
+            return "Book not found.";
+        } else if (member == null) {
+            return "Member not found.";
+        } else if (book.isAvailable()) {
+            return "This book was not borrowed.";
+        } else if (member.getBorrowedCount() == 0) {
+            return member.getName() + " has no borrowed books.";
+        } else {
+            book.setAvailable(true);
+            member.decrementBorrowed();
+            return "Book returned successfully by " + member.getName() + ".";
+        }
+    }
+}
+
+
+
+
+
+
+
+
    
 
