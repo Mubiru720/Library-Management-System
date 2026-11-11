@@ -8,15 +8,24 @@ import java.time.format.DateTimeFormatter;
  * LibraryGUI is the window the user sees.
  * It contains no library rules: it reads the text fields, calls a Library
  * method, and shows the message that comes back.
+ * All colours and fonts come from UITheme.
  *
- * Tabs: Books (add + search + view),
+ * The banner at the top shows how many books and members are stored.
+ * Tabs: Books (add one or several + search + view),
  *       Members (register one or several + view),
  *       Borrow/Return (borrow, return + activity log).
  */
 public class LibraryGUI extends JFrame {
 
+    // How many table rows are always visible (the tables scroll after that)
+    private static final int VISIBLE_ROWS = 10;
+
     // The one Library object used by the whole GUI
     private Library library = new Library();
+
+    // ---------- Banner components (the counters) ----------
+    private JLabel bookCountLabel = new JLabel("0");
+    private JLabel memberCountLabel = new JLabel("0");
 
     // ---------- Books tab components ----------
     private JTextField bookIdField = new JTextField();
@@ -25,7 +34,7 @@ public class LibraryGUI extends JFrame {
     private JTextField bookCategoryField = new JTextField();
     private JComboBox<String> searchTypeBox = new JComboBox<>(
             new String[]{"Title", "Author", "Category", "ID"});
-    private JTextField searchField = new JTextField(15);
+    private JTextField searchField = new JTextField(18);
     private DefaultTableModel bookTableModel;
 
     // ---------- Members tab components ----------
@@ -44,16 +53,177 @@ public class LibraryGUI extends JFrame {
 
     // ---------- Constructor: builds the window ----------
     public LibraryGUI() {
+        UITheme.setup(); // make pop-up dialogs use our fonts
+
         setTitle("Library Management System");
-        setSize(900, 650);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
+        getContentPane().setBackground(UITheme.BACKGROUND);
 
         JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(UITheme.BOLD);
         tabs.addTab("Books", createBooksPanel());
         tabs.addTab("Members", createMembersPanel());
         tabs.addTab("Borrow/Return", createBorrowPanel());
-        add(tabs);
+
+        add(createBanner(), BorderLayout.NORTH);
+        add(tabs, BorderLayout.CENTER);
+
+        updateCounts(); // show the starting numbers (0 and 0)
+
+        // pack() sizes the window to fit everything, which includes room for
+        // VISIBLE_ROWS table rows. Then we make sure it is never smaller than that.
+        pack();
+        setSize(Math.max(getWidth(), 900), getHeight());
+        setMinimumSize(getSize());
+        setLocationRelativeTo(null); // centre on screen
+    }
+
+    // =====================================================
+    //            BANNER AND COUNTERS (top of window)
+    // =====================================================
+
+    // The dark header strip: the title on the left, the two counters on the right
+    private JPanel createBanner() {
+        JPanel banner = new JPanel(new BorderLayout());
+        banner.setBackground(UITheme.PRIMARY);
+        banner.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+
+        JLabel title = new JLabel("Library Management System");
+        title.setFont(UITheme.TITLE);
+        title.setForeground(Color.WHITE);
+
+        JPanel stats = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        stats.setOpaque(false);
+        stats.add(createStatBox(bookCountLabel, "BOOKS"));
+        stats.add(createStatBox(memberCountLabel, "MEMBERS"));
+
+        banner.add(title, BorderLayout.WEST);
+        banner.add(stats, BorderLayout.EAST);
+        return banner;
+    }
+
+    // A small lighter box showing a big number with a caption underneath
+    private JPanel createStatBox(JLabel numberLabel, String caption) {
+        numberLabel.setFont(new Font(UITheme.TITLE.getFamily(), Font.BOLD, 22));
+        numberLabel.setForeground(Color.WHITE);
+        numberLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+        JLabel captionLabel = new JLabel(caption);
+        captionLabel.setFont(UITheme.SMALL);
+        captionLabel.setForeground(UITheme.BORDER);
+        captionLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+        JPanel box = new JPanel(new BorderLayout());
+        box.setBackground(UITheme.PRIMARY.brighter());
+        box.setBorder(BorderFactory.createEmptyBorder(4, 22, 4, 22));
+        box.add(numberLabel, BorderLayout.CENTER);
+        box.add(captionLabel, BorderLayout.SOUTH);
+        return box;
+    }
+
+    // Reads the totals from the Library and updates the two counters.
+    // These are the TOTAL stored, not just the rows currently shown in a table.
+    private void updateCounts() {
+        bookCountLabel.setText(String.valueOf(library.getBookCount()));
+        memberCountLabel.setText(String.valueOf(library.getMemberCount()));
+    }
+
+    // =====================================================
+    //                 SHARED HELPER METHODS
+    // =====================================================
+
+    // Builds a white "card" with labelled input fields and a row of buttons.
+    // The fields are split into 'columns' groups side by side (1 or 2),
+    // which keeps the form short so the table below has room for its rows.
+    private JPanel buildForm(String title, String[] labelTexts, JTextField[] fields,
+                             JPanel buttonRow, int columns) {
+        JPanel inputs = new JPanel(new GridLayout(1, columns, 25, 0));
+        inputs.setOpaque(false);
+
+        int perColumn = (fields.length + columns - 1) / columns;
+        for (int c = 0; c < columns; c++) {
+            int start = c * perColumn;
+            int end = Math.min(fields.length, start + perColumn);
+            inputs.add(createFieldGroup(labelTexts, fields, start, end));
+        }
+
+        JPanel card = new JPanel(new BorderLayout(0, 10));
+        card.setBackground(UITheme.CARD);
+        card.setBorder(UITheme.cardBorder(title));
+        card.add(inputs, BorderLayout.NORTH);
+        card.add(buttonRow, BorderLayout.SOUTH);
+        return card;
+    }
+
+    // One group of "label | text field" rows (fields start up to end-1)
+    private JPanel createFieldGroup(String[] labelTexts, JTextField[] fields, int start, int end) {
+        int rows = end - start;
+        JPanel labelColumn = new JPanel(new GridLayout(rows, 1, 0, 10));
+        JPanel fieldColumn = new JPanel(new GridLayout(rows, 1, 0, 10));
+        labelColumn.setOpaque(false);
+        fieldColumn.setOpaque(false);
+
+        for (int i = start; i < end; i++) {
+            labelColumn.add(UITheme.label(labelTexts[i]));
+            UITheme.styleField(fields[i]);
+            fieldColumn.add(fields[i]);
+        }
+
+        JPanel group = new JPanel(new BorderLayout(12, 0));
+        group.setOpaque(false);
+        group.add(labelColumn, BorderLayout.WEST);
+        group.add(fieldColumn, BorderLayout.CENTER);
+        return group;
+    }
+
+    // A right-aligned row of buttons
+    private JPanel createButtonRow(JButton... buttons) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        row.setOpaque(false);
+        for (int i = 0; i < buttons.length; i++) {
+            row.add(buttons[i]);
+        }
+        return row;
+    }
+
+    // A table model where the user cannot type into the cells
+    private DefaultTableModel createReadOnlyModel(String[] columns) {
+        return new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+    }
+
+    // Wraps a styled table in a scroll pane that is tall enough to show
+    // VISIBLE_ROWS rows. With fewer rows, the rest is empty space; with more,
+    // a scroll bar appears.
+    private JScrollPane createTableScroll(DefaultTableModel model) {
+        JTable table = new JTable(model);
+        UITheme.styleTable(table);
+        table.setPreferredScrollableViewportSize(
+                new Dimension(800, table.getRowHeight() * VISIBLE_ROWS));
+
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createLineBorder(UITheme.BORDER));
+        scroll.getViewport().setBackground(UITheme.CARD);
+        return scroll;
+    }
+
+    // A page-coloured panel with padding, used as the base of every tab
+    private JPanel createTabPanel() {
+        JPanel panel = new JPanel(new BorderLayout(12, 12));
+        panel.setBackground(UITheme.BACKGROUND);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 15, 12, 15));
+        return panel;
+    }
+
+    // Adds one "label + text field" row to a form (used by the pop-up dialogs)
+    private void addField(JPanel form, String labelText, JTextField field) {
+        form.add(UITheme.label(labelText));
+        UITheme.styleField(field);
+        form.add(field);
     }
 
     // =====================================================
@@ -61,46 +231,43 @@ public class LibraryGUI extends JFrame {
     // =====================================================
 
     private JPanel createBooksPanel() {
+        JPanel panel = createTabPanel();
+
         // Form at the top
-        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
-        form.setBorder(BorderFactory.createTitledBorder("Add a Book"));
-        addField(form, "Book ID:", bookIdField);
-        addField(form, "Title:", bookTitleField);
-        addField(form, "Author:", bookAuthorField);
-        addField(form, "Category:", bookCategoryField);
+        JButton addButton = UITheme.primaryButton("Add Book");
+        JButton addSeveralButton = UITheme.secondaryButton("Add Several...");
 
-        JButton addButton = new JButton("Add Book");
-        JButton addSeveralButton = new JButton("Add Several...");
-        JPanel buttonRow = new JPanel(new GridLayout(1, 2, 8, 0));
-        buttonRow.add(addButton);
-        buttonRow.add(addSeveralButton);
-        form.add(new JLabel(""));
-        form.add(buttonRow);
+        JPanel form = buildForm("Add a Book",
+                new String[]{"Book ID:", "Title:", "Author:", "Category:"},
+                new JTextField[]{bookIdField, bookTitleField, bookAuthorField, bookCategoryField},
+                createButtonRow(addSeveralButton, addButton), 2);
 
-        // Table in the middle
+        // Table in the middle (always has room for 10 rows)
         String[] columns = {"ID", "Title", "Author", "Category", "Status"};
-        bookTableModel = new DefaultTableModel(columns, 0);
-        JTable table = new JTable(bookTableModel);
-        table.setDefaultEditor(Object.class, null); // cells cannot be edited
+        bookTableModel = createReadOnlyModel(columns);
+        JScrollPane scrollPane = createTableScroll(bookTableModel);
 
         // Search bar at the bottom
-        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        searchPanel.setBorder(BorderFactory.createTitledBorder("Search"));
-        JButton searchButton = new JButton("Search");
-        JButton showAllButton = new JButton("Show All");
-        searchPanel.add(new JLabel("Search by:"));
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        searchPanel.setBackground(UITheme.CARD);
+        searchPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(UITheme.BORDER),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+
+        searchTypeBox.setFont(UITheme.BODY);
+        UITheme.styleField(searchField);
+        JButton searchButton = UITheme.primaryButton("Search");
+        JButton showAllButton = UITheme.secondaryButton("Show All");
+        searchPanel.add(UITheme.label("Search by:"));
         searchPanel.add(searchTypeBox);
         searchPanel.add(searchField);
         searchPanel.add(searchButton);
         searchPanel.add(showAllButton);
 
         // Put the three parts together
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         panel.add(form, BorderLayout.NORTH);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(searchPanel, BorderLayout.SOUTH);
-        
 
         // Connect buttons to their handler methods
         addButton.addActionListener(e -> handleAddBook());
@@ -140,7 +307,8 @@ public class LibraryGUI extends JFrame {
             JTextField authorField = new JTextField();
             JTextField categoryField = new JTextField();
 
-            JPanel inputPanel = new JPanel(new GridLayout(4, 2, 5, 5));
+            JPanel inputPanel = new JPanel(new GridLayout(4, 2, 8, 8));
+            inputPanel.setPreferredSize(new Dimension(340, 170));
             addField(inputPanel, "Book ID:", idField);
             addField(inputPanel, "Title:", titleField);
             addField(inputPanel, "Author:", authorField);
@@ -171,6 +339,7 @@ public class LibraryGUI extends JFrame {
 
         } while (again == JOptionPane.YES_OPTION);
     }
+
     private void handleSearchBooks() {
         String keyword = searchField.getText().trim();
 
@@ -202,6 +371,8 @@ public class LibraryGUI extends JFrame {
             bookTableModel.addRow(new Object[]{b.getBookId(), b.getTitle(),
                     b.getAuthor(), b.getCategory(), status});
         }
+
+        updateCounts();
     }
 
     // =====================================================
@@ -209,35 +380,24 @@ public class LibraryGUI extends JFrame {
     // =====================================================
 
     private JPanel createMembersPanel() {
+        JPanel panel = createTabPanel();
+
         // Form at the top
-        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
-        form.setBorder(BorderFactory.createTitledBorder("Register a Member"));
-        addField(form, "Member ID:", memberIdField);
-        addField(form, "Name:", memberNameField);
-        addField(form, "Course:", memberCourseField);
-        addField(form, "Phone:", memberPhoneField);
+        JButton registerButton = UITheme.primaryButton("Register Member");
+        JButton registerSeveralButton = UITheme.secondaryButton("Register Several...");
 
-        // Two buttons side by side in the last row
-        JButton registerButton = new JButton("Register Member");
-        JButton registerSeveralButton = new JButton("Register Several...");
-        JPanel buttonRow = new JPanel(new GridLayout(1, 2, 8, 0));
-        buttonRow.add(registerButton);
-        buttonRow.add(registerSeveralButton);
-        form.add(new JLabel(""));
-        form.add(buttonRow);
-
+        JPanel form = buildForm("Register a Member",
+                new String[]{"Member ID:", "Name:", "Course:", "Phone:"},
+                new JTextField[]{memberIdField, memberNameField, memberCourseField, memberPhoneField},
+                createButtonRow(registerSeveralButton, registerButton), 2);
 
         // Table in the middle
         String[] columns = {"Member ID", "Name", "Course", "Phone", "Books Borrowed"};
-        memberTableModel = new DefaultTableModel(columns, 0);
-        JTable table = new JTable(memberTableModel);
-        table.setDefaultEditor(Object.class, null);
+        memberTableModel = createReadOnlyModel(columns);
+        JScrollPane scrollPane = createTableScroll(memberTableModel);
 
-        // Put them together
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         panel.add(form, BorderLayout.NORTH);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        panel.add(scrollPane, BorderLayout.CENTER);
 
         registerButton.addActionListener(e -> handleRegisterMember());
         registerSeveralButton.addActionListener(e -> handleRegisterSeveral());
@@ -276,7 +436,8 @@ public class LibraryGUI extends JFrame {
             JTextField courseField = new JTextField();
             JTextField phoneField = new JTextField();
 
-            JPanel inputPanel = new JPanel(new GridLayout(4, 2, 5, 5));
+            JPanel inputPanel = new JPanel(new GridLayout(4, 2, 8, 8));
+            inputPanel.setPreferredSize(new Dimension(340, 170));
             addField(inputPanel, "Member ID:", idField);
             addField(inputPanel, "Name:", nameField);
             addField(inputPanel, "Course:", courseField);
@@ -318,6 +479,8 @@ public class LibraryGUI extends JFrame {
             memberTableModel.addRow(new Object[]{m.getMemberId(), m.getName(), m.getCourse(),
                     m.getPhone(), m.getBorrowedCount() + "/" + Member.MAX_BOOKS});
         }
+
+        updateCounts();
     }
 
     // =====================================================
@@ -325,33 +488,29 @@ public class LibraryGUI extends JFrame {
     // =====================================================
 
     private JPanel createBorrowPanel() {
-        // Form at the top
-        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
-        form.setBorder(BorderFactory.createTitledBorder("Borrow or Return a Book"));
-        addField(form, "Member ID:", borrowMemberIdField);
-        addField(form, "Book ID:", borrowBookIdField);
-        
+        JPanel panel = createTabPanel();
 
-        JButton borrowButton = new JButton("Borrow Book");
-        JButton borrowSeveralButton = new JButton("Borrow Several...");
-        JButton returnButton = new JButton("Return Book");
-        JButton returnSeveralButton = new JButton("Return Several...");
-        form.add(borrowButton);
-        form.add(returnButton);
-        form.add(borrowSeveralButton);
-        form.add(returnSeveralButton);
+        // Form at the top
+        JButton borrowButton = UITheme.primaryButton("Borrow Book");
+        JButton returnButton = UITheme.secondaryButton("Return Book");
+        JButton borrowSeveralButton = UITheme.secondaryButton("Borrow Several...");
+        JButton returnSeveralButton = UITheme.secondaryButton("Return Several...");
+
+        JPanel form = buildForm("Borrow or Return a Book",
+                new String[]{"Member ID:", "Book ID:"},
+                new JTextField[]{borrowMemberIdField, borrowBookIdField},
+                createButtonRow(borrowButton,returnButton, borrowSeveralButton, returnSeveralButton ), 2);
 
         // Activity log in the middle: a text area that shows every borrow/return
         logArea = new JTextArea();
         logArea.setEditable(false);
-        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        logArea.setFont(UITheme.MONO);
+        logArea.setForeground(UITheme.TEXT);
         logArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         JScrollPane logScroll = new JScrollPane(logArea);
-        logScroll.setBorder(BorderFactory.createTitledBorder("Activity Log"));
+        logScroll.getViewport().setBackground(UITheme.CARD);
+        logScroll.setBorder(UITheme.cardBorder("Activity Log"));
 
-        // Put them together
-        JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         panel.add(form, BorderLayout.NORTH);
         panel.add(logScroll, BorderLayout.CENTER);
 
@@ -385,7 +544,8 @@ public class LibraryGUI extends JFrame {
             JTextField memberIdField = new JTextField();
             JTextField bookIdField = new JTextField();
 
-            JPanel inputPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+            JPanel inputPanel = new JPanel(new GridLayout(2, 2, 8, 8));
+            inputPanel.setPreferredSize(new Dimension(340, 90));
             addField(inputPanel, "Member ID:", memberIdField);
             addField(inputPanel, "Book ID:", bookIdField);
 
@@ -405,7 +565,6 @@ public class LibraryGUI extends JFrame {
                 finishBorrowAction();
             } catch (NumberFormatException ex) {
                 message = "Member ID and Book ID must be numbers.";
-                
             }
 
             // Show what happened and ask whether to continue
@@ -424,7 +583,8 @@ public class LibraryGUI extends JFrame {
             JTextField memberIdField = new JTextField();
             JTextField bookIdField = new JTextField();
 
-            JPanel inputPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+            JPanel inputPanel = new JPanel(new GridLayout(2, 2, 8, 8));
+            inputPanel.setPreferredSize(new Dimension(340, 90));
             addField(inputPanel, "Member ID:", memberIdField);
             addField(inputPanel, "Book ID:", bookIdField);
 
@@ -499,15 +659,5 @@ public class LibraryGUI extends JFrame {
         logArea.append("[" + time + "] " + action + " - " + memberText + ", " + bookText + "\n");
         logArea.append("      " + message + "\n\n");
         logArea.setCaretPosition(logArea.getDocument().getLength()); // scroll to the newest entry
-    }
-
-    // =====================================================
-    //                   SMALL HELPER
-    // =====================================================
-
-    // Adds one "label + text field" row to a form
-    private void addField(JPanel form, String labelText, JTextField field) {
-        form.add(new JLabel(labelText));
-        form.add(field);
     }
 }
